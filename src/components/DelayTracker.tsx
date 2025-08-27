@@ -1,3 +1,12 @@
+import { 
+  collection, 
+  query, 
+  orderBy, 
+  onSnapshot, 
+  addDoc 
+} from "firebase/firestore";
+import { db } from "../firebase";
+
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,20 +28,21 @@ const DelayTracker = () => {
   const [delayTime, setDelayTime] = useState('');
   const [reports, setReports] = useState<DelayReport[]>([]);
 
-  // Load reports from localStorage on component mount
-  useEffect(() => {
-    const savedReports = localStorage.getItem('delayReports');
-    if (savedReports) {
-      setReports(JSON.parse(savedReports));
-    }
-  }, []);
+  // Load reports from Firestore in real-time
+useEffect(() => {
+  const q = query(collection(db, "reports"), orderBy("timestamp", "desc"));
+  const unsubscribe = onSnapshot(q, (snapshot) => {
+    const reportsData = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...(doc.data() as Omit<DelayReport, "id">),
+    }));
+    setReports(reportsData);
+  });
 
-  // Save reports to localStorage whenever reports change
-  useEffect(() => {
-    localStorage.setItem('delayReports', JSON.stringify(reports));
-  }, [reports]);
+  return () => unsubscribe();
+}, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!transportName.trim() || !delayTime.trim()) {
@@ -44,18 +54,18 @@ const DelayTracker = () => {
       return;
     }
 
-    const newReport: DelayReport = {
-      id: Date.now().toString(),
-      transportName: transportName.trim(),
-      delayTime: delay,
-      reportTime: new Date().toLocaleTimeString('en-US', { 
-        hour: '2-digit', 
-        minute: '2-digit'
-      }),
-      timestamp: Date.now()
-    };
+    const newReport = {
+  transportName: transportName.trim(),
+  delayTime: delay,
+  reportTime: new Date().toLocaleTimeString('en-US', { 
+    hour: '2-digit', 
+    minute: '2-digit'
+  }),
+  timestamp: Date.now()
+};
 
-    setReports(prev => [newReport, ...prev]);
+    await addDoc(collection(db, "reports"), newReport);
+
     setTransportName('');
     setDelayTime('');
   };
